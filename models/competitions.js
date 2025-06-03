@@ -6,10 +6,14 @@ const Competitionschema=new mongoose.Schema({
         enum: ['online', 'offline', 'hybrid'],
         required:true,trim:true},
     Rules:{type:String,
-        required:true,
+        //required:true,
         trim:true},
     location: {type: String,
               trim: true},
+    prize:{type:String,
+        required:true,
+        trim:true
+    },
 
     daysLeft: {
         type: Date,
