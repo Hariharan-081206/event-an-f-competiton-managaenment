@@ -20,6 +20,7 @@ router.post(
       check('mode', 'mode is required').not().isEmpty(),
       check('Rules', 'Rules to be mentioned are required').not().isEmpty(),
       check('location', 'location is required').not().isEmpty(),
+      check('prize','prize is required').not().isEmpty(),
       check('daysLeft', 'daysLeft is required').not().isEmpty(),
       check('link', 'Registration URL is required').not().isEmpty(),
       
