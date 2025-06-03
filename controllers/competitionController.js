@@ -13,6 +13,7 @@ export const createCompetition = async (req, res) => {
     mode,
     Rules,
     location,
+    prize,
     daysLeft,
     link,
   } = req.body;
@@ -24,6 +25,7 @@ export const createCompetition = async (req, res) => {
       mode,
       Rules,
       location,
+      prize,
       daysLeft,
       linkink,
     });
