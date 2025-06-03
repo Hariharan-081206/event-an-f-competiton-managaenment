@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { check } from 'express-validator';
-//import auth from '../middleware/auth.js';
+import isHost from '../middleware/isHost.js';
 import {
   createCompetition,
   getCompetitions,
@@ -13,17 +13,17 @@ const router = Router();
 
 router.post(
   '/',
-  [
-    //auth,
+  isHost,
     [
-      check('Competitionname', 'Competition name is required').not().isEmpty(),
-      check('Organizationname', 'Organization name is required').not().isEmpty(),
-      check('Description', 'Description is required').not().isEmpty(),
+      check('title', 'Competition name is required').not().isEmpty(),
+      check('Organizer', 'Organization name is required').not().isEmpty(),
+      check('mode', 'mode is required').not().isEmpty(),
       check('Rules', 'Rules to be mentioned are required').not().isEmpty(),
-      check('Status', 'Status is required').not().isEmpty(),
-      check('RegistrationLink', 'Registration URL is required').not().isEmpty(),
-      check('ConfirmationLink', 'Confirmation URL is required').not().isEmpty(),
-    ]
+      check('location', 'location is required').not().isEmpty(),
+      check('daysLeft', 'daysLeft is required').not().isEmpty(),
+      check('link', 'Registration URL is required').not().isEmpty(),
+      
+    
   ],
   createCompetition
 );
@@ -33,9 +33,9 @@ router.get('/', getCompetitions);
 router.get('/:id', getCompetitionById);
 
 
-router.put('/:id', updateCompetition);
+router.put('/:id', isHost, updateCompetition);
 
 
-router.delete('/:id', deleteCompetition);
+router.delete('/:id', isHost, deleteCompetition);
 
 export default router;

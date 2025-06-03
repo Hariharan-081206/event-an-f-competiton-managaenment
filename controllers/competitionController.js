@@ -8,24 +8,24 @@ export const createCompetition = async (req, res) => {
   }
 
   const {
-    Competitionname,
-    Organizationname,
-    Description,
+    title,
+    Organizer,
+    mode,
     Rules,
-    Status,
-    RegistrationLink,
-    ConfirmationLink,
+    location,
+    daysLeft,
+    link,
   } = req.body;
 
   try {
     const newCompetition = new Competition({
-      Competitionname,
-      Organizationname,
-      Description,
+      title,
+      Organizer,
+      mode,
       Rules,
-      Status,
-      RegistrationLink,
-      ConfirmationLink,
+      location,
+      daysLeft,
+      linkink,
     });
 
     const competition = await newCompetition.save();
@@ -39,12 +39,26 @@ export const createCompetition = async (req, res) => {
 export const getCompetitions = async (req, res) => {
   try {
     const competitions = await Competition.find().sort({ createdAt: -1 });
-    res.json(competitions);
+
+    const competitionsWithDaysLeft = competitions.map(comp => {
+      const today = new Date();
+      const endDate = new Date(comp.endDate);  // Make sure your schema has `endDate`
+      const diffTime = endDate - today;
+      const daysLeft = Math.max(Math.ceil(diffTime / (1000 * 60 * 60 * 24)), 0);
+
+      return {
+        ...comp.toObject(),
+        daysLeft: `${daysLeft} days`
+      };
+    });
+
+    res.json(competitionsWithDaysLeft);
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
   }
 };
+
 
 export const getCompetitionById = async (req, res) => {
   try {
@@ -53,8 +67,17 @@ export const getCompetitionById = async (req, res) => {
     if (!competition) {
       return res.status(404).json({ msg: 'Competition not found' });
     }
-    
-    res.json(competition);
+
+    const today = new Date();
+    const endDate = new Date(competition.endDate); // assumes endDate exists
+    const diffTime = endDate - today;
+    const daysLeft = Math.max(Math.ceil(diffTime / (1000 * 60 * 60 * 24)), 0);
+
+    res.json({
+      ...competition.toObject(),
+      daysLeft: `${daysLeft} days`
+    });
+
   } catch (err) {
     console.error(err.message);
     if (err.kind === 'ObjectId') {
@@ -63,6 +86,7 @@ export const getCompetitionById = async (req, res) => {
     res.status(500).send('Server Error');
   }
 };
+
 
 export const updateCompetition = async (req, res) => {
   try {
@@ -76,12 +100,26 @@ export const updateCompetition = async (req, res) => {
       return res.status(404).json({ msg: 'Competition not found' });
     }
 
-    res.json(competition);
+    // Calculate updated daysLeft if endDate exists
+    let daysLeft = null;
+    if (competition.endDate) {
+      const today = new Date();
+      const endDate = new Date(competition.endDate);
+      const diffTime = endDate - today;
+      daysLeft = Math.max(Math.ceil(diffTime / (1000 * 60 * 60 * 24)), 0);
+    }
+
+    res.json({
+      ...competition.toObject(),
+      daysLeft: daysLeft !== null ? `${daysLeft} days` : undefined
+    });
+
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
   }
 };
+
 
 
   

@@ -1,15 +1,23 @@
 import mongoose from 'mongoose';
 const Competitionschema=new mongoose.Schema({
-    Competitionname:{type:String,required:true,trim:true},
-    Organizationname:{type:String,required:true,trim:true},
-    Description:{type:String,required:true,trim:true},
-    Rules:{type:String,required:true,trim:true},
-    Status:{
-        type:String,
-        enum:['Upcoming','ongoing','completed','cancelled'],
-        default:'upcoming'
-    },  
-    RegistrationLink:{
+    title:{type:String,required:true,trim:true},
+    Organizer:{type:String,required:true,trim:true},
+    mode:{type:String,
+        enum: ['online', 'offline', 'hybrid'],
+        required:true,trim:true},
+    Rules:{type:String,
+        required:true,
+        trim:true},
+    location: {type: String,
+              trim: true},
+
+    daysLeft: {
+        type: Date,
+        required: true,
+        trim: true
+    },
+  
+    link:{
         type:String,
         required:true,
         trim: true,
@@ -18,17 +26,6 @@ const Competitionschema=new mongoose.Schema({
                  return /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/i.test(v);
             },
             message: props => `${props.value} is not a valid URL!`
-        }
-    },
-    ConfirmationLink:{
-        type:String,
-        required:true,
-        trim:true,
-        validate:{
-            validator:function(v){
-                return /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/i.test(v);
-            },
-            message:props => `${props.value} is not valid URL!`
         }
     },
 },{timestamps:true});
