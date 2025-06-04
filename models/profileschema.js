@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const profileSchema = new mongoose.Schema({
   fullName:{type: String,required: true},
   Dept:{type: String,required: true},
+  RegNo:{type:String,unique:true},
   batch:{type: String},
   Gender:{type:String},
   domain:{type:String},
