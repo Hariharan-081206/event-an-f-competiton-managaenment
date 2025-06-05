@@ -93,6 +93,7 @@ import authRoutes from './routes/authRoutes.js';
 import hostRoutes from './routes/hostRoutes.js';
 import MongoStore from 'connect-mongo';
 import competitionRoutes from './routes/competitions.js';
+import eventRoutes from './routes/eventRoutes.js';
 
 const app = express();
 dotenv.config();
@@ -135,6 +136,7 @@ app.use('/', authRoutes);
 //app.use('/api', scraperRoutes);
 app.use('/api/host',hostRoutes);
 app.use('/api/competitions', competitionRoutes);
+app.use('/api',eventRoutes);
 
 /*app.get('/api/me', (req, res) => {
   if (req.isAuthenticated()) {
