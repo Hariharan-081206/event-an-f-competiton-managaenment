@@ -7,6 +7,7 @@ import {
   updateEvent,
   deleteEvent,
 } from '../controllers/eventControllers.js';
+import isHost from '../middleware/isHostEvent.js';
 
 const router = express.Router();
 
@@ -14,7 +15,7 @@ const router = express.Router();
  * @route POST /events
  * @desc Create a new event (venue booking handled separately)
  */
-router.post('/events', createEvent);
+router.post('/events', isHost, createEvent);
 
 /**
  * @route GET /events
@@ -32,12 +33,12 @@ router.get('/events/:id', getEventById);
  * @route PUT /events/:id
  * @desc Update an existing event
  */
-router.put('/events/:id', updateEvent);
+router.put('/events/:id', isHost, updateEvent);
 
 /**
  * @route DELETE /events/:id
  * @desc Delete an event
  */
-router.delete('/events/:id', deleteEvent);
+router.delete('/events/:id', isHost, deleteEvent);
 
 export default router;
