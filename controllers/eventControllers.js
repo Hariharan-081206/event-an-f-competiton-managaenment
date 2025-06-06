@@ -160,36 +160,6 @@ export async function getEventById(req, res) {
 }
 
 /**
- * 📌 Update an event by ID
- */
-/*export async function updateEvent(req, res) {
-  const { title, description, collegeName, venue, EventDate, startTime, endTime } = req.body;
-
-  try {
-    const updatedEvent = await Event.findByIdAndUpdate(
-      req.params.id,
-      {
-        title,
-        description,
-        collegeName,
-        venue,
-        EventDate: new Date(EventDate),
-        startTime,
-        endTime,
-      },
-      { new: true, runValidators: true }
-    );
-
-    if (!updatedEvent) return res.status(404).json({ message: 'Event not found' });
-
-    res.json(updatedEvent);
-  } catch (error) {
-    console.error('Error updating event:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-}*/
-
-/**
  * 📌 Update an event by ID (Partial Update Support)
  */
 export async function updateEvent(req, res) {
