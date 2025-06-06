@@ -1,3 +1,5 @@
+// COMBINING TWO DATABASES
+
 /*
 import createEventModel from '../models/eventSchema.js';
 import createVenueModel from '../models/venueschema.js';
@@ -99,6 +101,9 @@ export async function deleteEvent(req, res) {
   }
 }*/
 
+
+// FOR SINGLE DATABASE
+
 import Event from '../models/eventSchema.js'; // direct import, no multi-db logic
 
 /**
@@ -157,7 +162,7 @@ export async function getEventById(req, res) {
 /**
  * 📌 Update an event by ID
  */
-export async function updateEvent(req, res) {
+/*export async function updateEvent(req, res) {
   const { title, description, collegeName, venue, EventDate, startTime, endTime } = req.body;
 
   try {
@@ -182,7 +187,35 @@ export async function updateEvent(req, res) {
     console.error('Error updating event:', error);
     res.status(500).json({ message: 'Internal Server Error' });
   }
+}*/
+
+/**
+ * 📌 Update an event by ID (Partial Update Support)
+ */
+export async function updateEvent(req, res) {
+  try {
+    // If EventDate is present, convert to Date
+    if (req.body.EventDate) {
+      req.body.EventDate = new Date(req.body.EventDate);
+    }
+
+    const updatedEvent = await Event.findByIdAndUpdate(
+      req.params.id,
+      { $set: req.body }, // only update provided fields
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedEvent) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    res.json(updatedEvent);
+  } catch (error) {
+    console.error('Error updating event:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
 }
+
 
 /**
  * 📌 Delete an event by ID
