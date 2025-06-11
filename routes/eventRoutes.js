@@ -15,7 +15,7 @@ const router = express.Router();
  * @route POST /events
  * @desc Create a new event (venue booking handled separately)
  */
-router.post('/events', isHost, createEvent);
+router.post('/events', createEvent);
 
 /**
  * @route GET /events
@@ -39,6 +39,6 @@ router.put('/events/:id', isHost, updateEvent);
  * @route DELETE /events/:id
  * @desc Delete an event
  */
-router.delete('/events/:id', isHost, deleteEvent);
+router.delete('/events/:id', deleteEvent);
 
 export default router;
