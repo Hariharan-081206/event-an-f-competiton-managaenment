@@ -225,26 +225,30 @@
 //     console.error('Failed to connect databases:', err);
 //     process.exit(1);
 //   });
-
-
+// 🌐 Core Imports
 import 'dotenv/config';
 import express from 'express';
 import dotenv from 'dotenv';
+import http from 'http';
 import mongoose from 'mongoose';
 import session from 'express-session';
 import cors from 'cors';
 import passport from 'passport';
+import MongoStore from 'connect-mongo';
+import { Server as SocketIOServer } from 'socket.io';
+
+// 🔧 Configs
 import configurePassport from './config/passport.js';
+
+// 📦 Routes
 import authRoutes from './routes/authRoutes.js';
 import hostRoutes from './routes/hostRoutes.js';
-import MongoStore from 'connect-mongo';
 import competitionRoutes from './routes/competitions.js';
 import eventRoutes from './routes/eventRoutes.js';
 import profileRoute from './routes/profileRoutes.js';
 import venueRoutes from './routes/venueRoutes.js';
 import confirmRegister from './routes/confirmationRoutes.js';
-import http from 'http';
-import { Server as SocketIOServer } from 'socket.io';
+import templateRoutes from './routes/templateRoutes.js';
 
 dotenv.config();
 
@@ -310,6 +314,7 @@ app.use('/api', eventRoutes);
 app.use('/api/profile', profileRoute);
 app.use('/api/competition', confirmRegister);
 app.use('/api/venue', venueRoutes);
+app.use('/api/templates', templateRoutes);
 
 // ✅ Host-only test route
 app.get('/api/host-only', (req, res) => {

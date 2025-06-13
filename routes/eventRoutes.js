@@ -33,7 +33,7 @@ router.get('/events/:id', getEventById);
  * @route PUT /events/:id
  * @desc Update an existing event
  */
-router.put('/events/:id', isHost, updateEvent);
+router.put('/events/:id', updateEvent);
 
 /**
  * @route DELETE /events/:id

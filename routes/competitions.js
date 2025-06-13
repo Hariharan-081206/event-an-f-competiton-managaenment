@@ -13,7 +13,7 @@ const router = Router();
 
 router.post(
   '/',
-  isHost,
+  //isHost,
     [
       check('title', 'Competition name is required').not().isEmpty(),
       check('Organizer', 'Organization name is required').not().isEmpty(),
@@ -34,7 +34,7 @@ router.get('/', getCompetitions);
 router.get('/:id', getCompetitionById);
 
 
-router.put('/:id', isHost, updateCompetition);
+router.put('/:id', updateCompetition);
 
 
 router.delete('/:id', isHost, deleteCompetition);
