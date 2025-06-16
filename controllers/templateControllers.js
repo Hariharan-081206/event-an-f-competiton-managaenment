@@ -2,7 +2,6 @@ import createtemplateModel from '../models/templateschema.js';
 import createVenueModel from '../models/venueschema.js';
 import createEventModel from '../models/eventSchema.js';
 import { scheduleVenueFreeingJob } from '../utils/scheduleJobs.js';
-
 export async function createTemplate(req, res) {
   const { title, description, collegeName, EventDate, StartTime, endTime, roomnumber } = req.body;
 
@@ -12,7 +11,6 @@ export async function createTemplate(req, res) {
   const Template = createtemplateModel(myProjectDb);
   const Venue = createVenueModel(venueDb);
 
-  // ✅ Basic validation
   if (!title || !description || !collegeName || !EventDate || !StartTime || !endTime || !roomnumber) {
     return res.status(400).json({ message: 'All fields are required' });
   }
@@ -29,22 +27,22 @@ export async function createTemplate(req, res) {
       return res.status(400).json({ message: 'Room not found in venue database' });
     }
 
-    // ✅ Conflict check (optional if needed for templates)
     const conflict = await Template.findOne({
-      roomnumber: venue.roomnumber,
-      $or: [
-        {
-          StartTime: { $lt: new Date(endTime) },
-          endTime: { $gt: new Date(StartTime) },
-        },
-      ],
-    });
+  'venueDetails.roomnumber': venue.roomnumber, // ✅ Match on roomnumber
+  $or: [
+    {
+      StartTime: { $lt: new Date(endTime) },
+      endTime: { $gt: new Date(StartTime) },
+    },
+  ],
+});
 
-    if (conflict) {
-      return res.status(400).json({ message: 'Room already reserved during selected time' });
-    }
+if (conflict) {
+  return res.status(400).json({ message: 'Room already reserved during selected time' });
+}
 
-    // ✅ Create template with venue info
+
+    // ✅ Create template
     const newTemplate = new Template({
       title,
       description,
@@ -52,19 +50,21 @@ export async function createTemplate(req, res) {
       EventDate: new Date(EventDate),
       StartTime: new Date(StartTime),
       endTime: new Date(endTime),
-      venueDetails:{
-      venueId:venue._id.toString(),
-      roomnumber: venue.roomnumber,
-      location:venue.location,
-      }, // Store normalized/validated roomnumber
+      venueDetails: {
+        venueId: venue._id.toString(),
+        roomnumber: venue.roomnumber,
+        location: venue.location,
+      },
     });
 
     const savedTemplate = await newTemplate.save();
+    console.log('✅ Emitting venueStatusChanged for:', venue.roomnumber);
     req.io.emit('venueStatusChanged', {
-        venueId: venue.roomnumber.toString(),
-        status: 'occupied',
+      venueId: venue.roomnumber.toString(),
+      status: 'occupied',
     });
-    scheduleVenueFreeingJob(savedTemplate.endTime,venue.roomnumber,req.io);
+
+    scheduleVenueFreeingJob(savedTemplate.endTime, venue.roomnumber, req.io);
 
     res.status(201).json({
       message: '✅ Template created successfully',
