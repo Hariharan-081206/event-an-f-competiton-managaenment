@@ -236,6 +236,7 @@ import cors from 'cors';
 import passport from 'passport';
 import MongoStore from 'connect-mongo';
 import { Server as SocketIOServer } from 'socket.io';
+import './jobs/scheduleSheetSync.js';
 
 // 🔧 Configs
 import configurePassport from './config/passport.js';
@@ -249,6 +250,8 @@ import profileRoute from './routes/profileRoutes.js';
 import venueRoutes from './routes/venueRoutes.js';
 import confirmRegister from './routes/confirmationRoutes.js';
 import templateRoutes from './routes/templateRoutes.js';
+import eventregister from './routes/eventconfirmation.js';
+import adminRoutes from './routes/adminRoutes.js';
 
 dotenv.config();
 
@@ -315,6 +318,8 @@ app.use('/api/profile', profileRoute);
 app.use('/api/competition', confirmRegister);
 app.use('/api/venue', venueRoutes);
 app.use('/api/templates', templateRoutes);
+app.use('/api/events', eventregister);
+app.use('/admin', adminRoutes);
 
 // ✅ Host-only test route
 app.get('/api/host-only', (req, res) => {
