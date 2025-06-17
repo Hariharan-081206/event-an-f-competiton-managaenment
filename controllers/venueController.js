@@ -1,11 +1,11 @@
 import createEventModel from '../models/eventSchema.js';
-import createVenueModel from '../models/venueschema.js';
+import createClassroomModel from '../models/venueschema.js';
 import { scheduleVenueFreeingJob } from '../utils/scheduleJobs.js';
 
 // 📌 Get venues from venueDB (MONGO_URI2)
 export async function listVenues(req, res) {
   const venueDb = req.app.locals.venueDb;
-  const Venue = createVenueModel(venueDb);
+  const Venue = createClassroomModel(venueDb);
 
   try {
     const venues = await Venue.find();
@@ -16,24 +16,27 @@ export async function listVenues(req, res) {
   }
 }
 export async function bookVenue(req, res) {
-  const { eventId, roomnumber, startTime, endTime } = req.body;
+  const { eventId, name, startTime, endTime } = req.body;
 
   const venueDb = req.app.locals.venueDb;
   const myProjectDb = req.app.locals.myProjectDb;
 
-  const Venue = createVenueModel(venueDb);
+  const Venue = createClassroomModel(venueDb);
   const Event = createEventModel(myProjectDb);
 
   const io = req.io; // ✅ ACCESS io from middleware
 
   // ✅ Basic validation
-  if (!eventId || !roomnumber || !startTime || !endTime) {
+  if (!eventId || !name || !startTime || !endTime) {
     return res.status(400).json({ message: 'Required fields missing' });
   }
 
   try {
-    // 🔄 Instead of venueId, find by roomnumber
-    const venue = await Venue.findOne({ roomnumber: roomnumber.trim().toLowerCase() });
+    // 🔄 Instead of venueId, find by name
+  const normalizedRoom = name.trim();
+  const venue = await Venue.findOne({
+  name: new RegExp(`^${normalizedRoom}$`, 'i') 
+});
 
     if (!venue) {
       return res.status(404).json({ message: 'Venue not found' });
@@ -41,7 +44,7 @@ export async function bookVenue(req, res) {
 
     // ✅ Check for overlapping booking in events
     const conflictingBooking = await Event.findOne({
-  'venueDetails.roomnumber': roomnumber,
+  'venueDetails.name': name,
   $or: [
     { startTime: { $lt: new Date(endTime) }, endTime: { $gt: new Date(startTime) } },
   ],
@@ -53,7 +56,7 @@ if (conflictingBooking) {
 
     // ✅ Emit temporary occupied status
     io.emit('venueStatusChanged', {
-      roomnumber: venue.roomnumber.toString(),
+      name: venue.name.toString(),
       newStatus: 'occupied',
     });
 
@@ -63,7 +66,7 @@ if (conflictingBooking) {
       {
         venueDetails: {
           venueId: venue._id.toString(),
-          roomnumber: venue.roomnumber,
+          name: venue.name,
           capacity: venue.capacity,
           location: venue.location,
         },
@@ -76,14 +79,14 @@ if (conflictingBooking) {
     if (!updatedEvent) {
       // Revert emitted status
       io.emit('venueStatusChanged', {
-        venueId: venue.roomnumber.toString(),
+        venueId: venue.name.toString(),
         newStatus: 'free',
       });
       return res.status(404).json({ message: 'Event not found' });
     }
 
     // ✅ Schedule job to emit venue availability later
-    scheduleVenueFreeingJob(updatedEvent.endTime, venue.roomnumber, io);
+    scheduleVenueFreeingJob(updatedEvent.endTime, venue.name, io);
 
     res.json({
       message: 'Venue booked and event updated successfully',

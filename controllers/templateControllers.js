@@ -1,17 +1,17 @@
 import createtemplateModel from '../models/templateschema.js';
-import createVenueModel from '../models/venueschema.js';
+import createClassroomModel from '../models/venueschema.js';
 import createEventModel from '../models/eventSchema.js';
 import { scheduleVenueFreeingJob } from '../utils/scheduleJobs.js';
 export async function createTemplate(req, res) {
-  const { title, description, collegeName, EventDate, StartTime, endTime, roomnumber } = req.body;
+  const { title, description, collegeName, EventDate, StartTime, endTime, name} = req.body;
 
   const myProjectDb = req.app.locals.myProjectDb;
   const venueDb = req.app.locals.venueDb;
 
   const Template = createtemplateModel(myProjectDb);
-  const Venue = createVenueModel(venueDb);
+  const Venue = createClassroomModel(venueDb);
 
-  if (!title || !description || !collegeName || !EventDate || !StartTime || !endTime || !roomnumber) {
+  if (!title || !description || !collegeName || !EventDate || !StartTime || !endTime || !name) {
     return res.status(400).json({ message: 'All fields are required' });
   }
 
@@ -20,15 +20,17 @@ export async function createTemplate(req, res) {
   }
 
   try {
-    const normalizedRoom = roomnumber.trim().toLowerCase();
-    const venue = await Venue.findOne({ roomnumber: normalizedRoom });
+    const normalizedRoom = name.trim();
+    const venue = await Venue.findOne({
+  name: new RegExp(`^${normalizedRoom}$`, 'i') // 'i' = case-insensitive
+});
 
     if (!venue) {
       return res.status(400).json({ message: 'Room not found in venue database' });
     }
 
     const conflict = await Template.findOne({
-  'venueDetails.roomnumber': venue.roomnumber, // ✅ Match on roomnumber
+  'venueDetails.name': venue.name, // ✅ Match on roomnumber
   $or: [
     {
       StartTime: { $lt: new Date(endTime) },
@@ -52,19 +54,19 @@ if (conflict) {
       endTime: new Date(endTime),
       venueDetails: {
         venueId: venue._id.toString(),
-        roomnumber: venue.roomnumber,
+        name: venue.name,
         location: venue.location,
       },
     });
 
     const savedTemplate = await newTemplate.save();
-    console.log('✅ Emitting venueStatusChanged for:', venue.roomnumber);
+    console.log('✅ Emitting venueStatusChanged for:', venue.name);
     req.io.emit('venueStatusChanged', {
-      venueId: venue.roomnumber.toString(),
+      venueId: venue.name.toString(),
       status: 'occupied',
     });
 
-    scheduleVenueFreeingJob(savedTemplate.endTime, venue.roomnumber, req.io);
+    scheduleVenueFreeingJob(savedTemplate.endTime, venue.name, req.io);
 
     res.status(201).json({
       message: '✅ Template created successfully',
@@ -127,14 +129,14 @@ export async function updateTemplate(req, res) {
     EventDate,
     StartTime,
     endTime,
-    roomnumber
+    name
   } = req.body;
 
   const myProjectDb = req.app.locals.myProjectDb;
   const venueDb = req.app.locals.venueDb;
 
   const Template = createtemplateModel(myProjectDb);
-  const Venue = createVenueModel(venueDb);
+  const Venue = createClassroomModel(venueDb);
 
   try {
     const existingTemplate = await Template.findById(id);
@@ -159,10 +161,10 @@ export async function updateTemplate(req, res) {
 
     let venueToUse = existingTemplate.venueDetails;
 
-    // If roomnumber is being changed
-    if (roomnumber && roomnumber !== existingTemplate.venueDetails.roomnumber) {
-      const normalizedRoom = roomnumber.trim().toLowerCase();
-      const venue = await Venue.findOne({ roomnumber: normalizedRoom });
+    // If name is being changed
+    if (name && name !== existingTemplate.venueDetails.name) {
+      const normalizedRoom = name.trim().toLowerCase();
+      const venue = await Venue.findOne({name: normalizedRoom });
 
       if (!venue) {
         return res.status(400).json({ message: 'Room not found in venue database' });
@@ -171,7 +173,7 @@ export async function updateTemplate(req, res) {
       // Check conflict with other templates (excluding current one)
       const conflict = await Template.findOne({
         _id: { $ne: id },
-        'venueDetails.roomnumber': normalizedRoom,
+        'venueDetails.name': normalizedRoom,
         $or: [
           {
             StartTime: { $lt: updatedFields.endTime },
@@ -187,7 +189,7 @@ export async function updateTemplate(req, res) {
       // Update venue details
       venueToUse = {
         venueId: venue._id.toString(),
-        roomnumber: venue.roomnumber,
+        name: venue.name,
         location: venue.location,
       };
     }
@@ -204,7 +206,7 @@ export async function updateTemplate(req, res) {
 
     // Notify and reschedule
     req.io.emit('templateUpdated', { id, updatedTemplate });
-    scheduleVenueFreeingJob(updatedTemplate.endTime, venueToUse.roomnumber, req.io);
+    scheduleVenueFreeingJob(updatedTemplate.endTime, venueToUse.name, req.io);
 
     res.status(200).json({
       message: '✅ Template updated successfully',
@@ -262,12 +264,12 @@ export async function postTemplateToUsers(req, res) {
 
     // ✅ Emit socket to update clients
     req.io.emit('venueStatusChanged', {
-      venueId: venueDetails.roomnumber,
+      venueId: venueDetails.name,
       status: 'occupied',
     });
 
     // ✅ Schedule venue auto-freeing
-    scheduleVenueFreeingJob(savedEvent.endTime, venueDetails.roomnumber, req.io);
+    scheduleVenueFreeingJob(savedEvent.endTime, venueDetails.name, req.io);
 
     res.status(201).json({
       message: '✅ Template successfully posted as event',

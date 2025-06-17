@@ -17,7 +17,8 @@ export default function createVenueModel(connection) {
 import mongoose from 'mongoose';
 
 const venueSchema = new mongoose.Schema({
-  roomnumber: String,
+  name: String,
+  type:String,
   capacity: Number,
   location: String,
   status: {
@@ -28,8 +29,8 @@ const venueSchema = new mongoose.Schema({
 
 });
 
-export default function createVenueModel(db) {
+export default function createClassroomModel(db) {
   // Check if model is already compiled in the connection
-  return db.models.Venue || db.model('Venue', venueSchema);
+  return db.models.classroom || db.model('classroom', venueSchema);
 }
 

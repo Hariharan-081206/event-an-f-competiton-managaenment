@@ -1,116 +1,19 @@
 // COMBINING TWO DATABASES
 import mongoose from 'mongoose';
 import createEventModel from '../models/eventSchema.js';
-import createVenueModel from '../models/venueschema.js';
+import createClassroomModel from '../models/venueschema.js';
 import { scheduleVenueFreeingJob } from '../utils/scheduleJobs.js';
-
-/**
- * 📌 Create an event (with venue validation & cross-DB logic)
- */
-
-// export async function createEvent(req, res) {
-//   const { title, description, collegeName, startTime, endTime, roomnumber } = req.body;
-
-//   const myProjectDb = req.app.locals.myProjectDb;
-//   const venueDb = req.app.locals.venueDb;
-
-//   const Event = createEventModel(myProjectDb);
-//   const Venue = createVenueModel(venueDb);
-
-//   // ✅ Basic validation
-//   if (!title || !description || !collegeName || !startTime || !endTime || !roomnumber) {
-//     return res.status(400).json({ message: 'All fields are required' });
-//   }
-
-//   if (new Date(startTime) >= new Date(endTime)) {
-//     return res.status(400).json({ message: 'Start time must be before end time' });
-//   }
-
-//   try {
-//      console.log('📌 Fetched venueId:', roomnumber);
-//     const normalizedRoom = roomnumber.trim().toLowerCase();
-//      const venue = await Venue.findOne({ roomnumber: normalizedRoom });
-//      console.log('📌 Venue document:', venue);
-
-
-//     if (!venue) {
-//       return res.status(404).json({ message: 'Venue not found' });
-//     }
-
-//     // ✅ Defensive status check
-//     const normalizedStatus = venue.status?.trim().toLowerCase();
-//     console.log('✅ DEBUG: Normalized Venue Status =', normalizedStatus);
-
-//     if (normalizedStatus !== 'free') {
-//       return res.status(400).json({ message: `Venue not available (status is "${normalizedStatus}")` });
-//     }
-
-
-//     // ✅ Overlap check with venue._id
-//     const conflictingEvent = await Event.findOne({
-//       'venueDetails.venueId': venue._id.toString(),
-//       $or: [
-//         { startTime: { $lt: new Date(endTime) }, endTime: { $gt: new Date(startTime) } }
-//       ],
-//     });
-
-//     if (conflictingEvent) {
-//       return res.status(400).json({ message: 'Venue already booked for the selected time range' });
-//     }
-
-//     // ✅ Update venue status to 'occupied'
-//     venue.status = 'occupied';
-//     await venue.save();
-
-//     // ✅ Emit venue status change
-//     req.io.emit('venueStatusChanged', {
-//       venueId: venue._id.toString(),
-//       status: 'occupied',
-//     });
-
-//     // ✅ Create and save the event
-//     const newEvent = new Event({
-//       title,
-//       description,
-//       collegeName,
-//       startTime: new Date(startTime),
-//       endTime: new Date(endTime),
-//       venueDetails: {
-//         venueId: venue._id.toString(),
-//         roomnumber: venue.roomnumber,
-//         capacity: venue.capacity,
-//         location: venue.location,
-//       },
-//     });
-
-//     const savedEvent = await newEvent.save();
-
-//     // ✅ Schedule auto-freeing of venue
-//     scheduleVenueFreeingJob(savedEvent.endTime, venue._id, Venue, req.io);
-
-//     res.status(201).json(savedEvent);
-//   } catch (error) {
-//     console.error('Error creating event:', error);
-//     res.status(500).json({ message: 'Internal Server Error' });
-//   }
-// }
-
-
-
-
-
-
 export async function createEvent(req, res) {
-  const { title, description, collegeName, startTime, endTime, roomnumber } = req.body;
+  const { title, description, collegeName, startTime, endTime, name} = req.body;
 
   const myProjectDb = req.app.locals.myProjectDb;
   const venueDb = req.app.locals.venueDb;
 
   const Event = createEventModel(myProjectDb);
-  const Venue = createVenueModel(venueDb);
+  const Venue = createClassroomModel(venueDb);
 
   // ✅ Basic validation
-  if (!title || !description || !collegeName || !startTime || !endTime || !roomnumber) {
+  if (!title || !description || !collegeName || !startTime || !endTime || !name) {
     return res.status(400).json({ message: 'All fields are required' });
   }
 
@@ -119,8 +22,10 @@ export async function createEvent(req, res) {
   }
 
   try {
-    const normalizedRoom = roomnumber.trim().toLowerCase();
-    const venue = await Venue.findOne({ roomnumber: normalizedRoom });
+    const normalizedRoom = name.trim();
+    const venue = await Venue.findOne({
+  name: new RegExp(`^${normalizedRoom}$`, 'i') // 'i' = case-insensitive
+});
 
     if (!venue) {
       return res.status(400).json({ message: 'Venue not found' });
@@ -141,6 +46,7 @@ export async function createEvent(req, res) {
       return res.status(400).json({ message: 'Venue already booked for the selected time range' });
     }
 
+
     // ✅ Create new event
     const newEvent = new Event({
       title,
@@ -150,7 +56,7 @@ export async function createEvent(req, res) {
       endTime: new Date(endTime),
       venueDetails: {
         venueId: venue._id.toString(),
-        roomnumber: venue.roomnumber,
+        name: venue.name,
         capacity: venue.capacity,
         location: venue.location,
       },
@@ -160,12 +66,12 @@ export async function createEvent(req, res) {
 
     // ✅ Optional: Notify clients via socket
     req.io.emit('venueStatusChanged', {
-      venueId: venue.roomnumber.toString(),
+      venueId: venue.name.toString(),
       status: 'occupied',
     });
 
     // ✅ Optional: Schedule venue auto-freeing (no longer needed if status is removed, but still usable)
-    scheduleVenueFreeingJob(savedEvent.endTime, venue.roomnumber, req.io);
+    scheduleVenueFreeingJob(savedEvent.endTime, venue.name, req.io);
 
     res.status(201).json(savedEvent);
   } catch (error) {
@@ -275,7 +181,7 @@ export async function deleteEvent(req, res) {
 
     // ✅ Free venue if it exists
     if (deletedEvent?.venueDetails?.venueId) {
-      const Venue = createVenueModel(req.app.locals.venueDb);
+      const Venue = createClassroomModel(req.app.locals.venueDb);
       await Venue.findByIdAndUpdate(deletedEvent.venueDetails.venueId, { status: 'free' });
 
       req.io.emit('venueStatusChanged', {
