@@ -1,201 +1,274 @@
-// COMBINING TWO DATABASES
 import mongoose from 'mongoose';
-import createEventModel from '../models/eventSchema.js';
-import createClassroomModel from '../models/venueschema.js';
 import { scheduleVenueFreeingJob } from '../utils/scheduleJobs.js';
+import dayjs from 'dayjs';
+import customParseFormat from 'dayjs/plugin/customParseFormat.js';
+dayjs.extend(customParseFormat);
+
 export async function createEvent(req, res) {
-  const { title, description, collegeName, startTime, endTime, name} = req.body;
+  
+  const Event =  req.models.Event;
+  const Venue = req.models.Venue;
 
-  const myProjectDb = req.app.locals.myProjectDb;
-  const venueDb = req.app.locals.venueDb;
+  // Validation
+  const { title, description, collegeName, startTime, endTime, roomnumber, EventDate } = req.body;
 
-  const Event = createEventModel(myProjectDb);
-  const Venue = createClassroomModel(venueDb);
+if (!title || !description || !collegeName || !roomnumber || !EventDate || !startTime || !endTime) {
+  return res.status(400).json({ message: 'All fields are required' });
+}
 
-  // ✅ Basic validation
-  if (!title || !description || !collegeName || !startTime || !endTime || !name) {
-    return res.status(400).json({ message: 'All fields are required' });
+  const startDateTimeStr = `${EventDate} ${startTime}`;  // "10-07-2025 05:00 PM"
+  const endDateTimeStr = `${EventDate} ${endTime}`;      // "10-07-2025 06:00 PM"
+  const parsedStart = dayjs(startDateTimeStr, 'YYYY-MM-DD HH:mm');
+  const parsedEnd = dayjs(endDateTimeStr, 'YYYY-MM-DD HH:mm');
+  console.log('EventDate:', EventDate);
+  if (!parsedStart.isValid() || !parsedEnd.isValid()) {
+    return res.status(400).json({ message: 'Invalid date/time format' });
   }
 
-  if (new Date(startTime) >= new Date(endTime)) {
-    return res.status(400).json({ message: 'Start time must be before end time' });
+  // if (new Date(startTime) >= new Date(endTime)) {
+  //   return res.status(400).json({ message: 'End time must be after start time' });
+  // }
+  if (parsedStart >= parsedEnd) {
+    return res.status(400).json({ message: 'End time must be after start time' });
   }
 
   try {
-    const normalizedRoom = name.trim();
-    const venue = await Venue.findOne({
-  name: new RegExp(`^${normalizedRoom}$`, 'i') // 'i' = case-insensitive
-});
+    const normalizedRoom = roomnumber.trim().toUpperCase();
+    const venue = await Venue.findOne({ roomnumber: normalizedRoom });
 
     if (!venue) {
-      return res.status(400).json({ message: 'Venue not found' });
+      return res.status(404).json({ message: 'Venue not found' });
     }
-
-    // ✅ Check for conflicting events using start/end time
+    //check for conflict
     const conflictingEvent = await Event.findOne({
-      'venueDetails.venueId': venue._id,
-      $or: [
-        {
-          startTime: { $lt: new Date(endTime) },
-          endTime: { $gt: new Date(startTime) },
-        },
-      ],
+          'venueDetails.roomnumber': normalizedRoom,
+            startTime: { $lt: new Date(endTime) } , 
+            endTime: { $gt: new Date(startTime)},
+      'venueDetails.roomnumber': normalizedRoom,
+        startTime: { $lt: parsedEnd.toDate() },
+        endTime: { $gt: parsedStart.toDate() },
     });
-
     if (conflictingEvent) {
-      return res.status(400).json({ message: 'Venue already booked for the selected time range' });
+      return res.status(409).json({ 
+        message: 'Venue already booked',
+        conflict: {
+          id: conflictingEvent._id,
+          title: conflictingEvent.title,
+          time: `${conflictingEvent.startTime} to ${conflictingEvent.endTime}`
+        }
+      });
     }
 
-
-    // ✅ Create new event
+    // Create event
     const newEvent = new Event({
       title,
       description,
       collegeName,
-      startTime: new Date(startTime),
-      endTime: new Date(endTime),
+      EventDate,
+      startTime: parsedStart.toDate(),
+      endTime: parsedEnd.toDate(),
       venueDetails: {
-        venueId: venue._id.toString(),
-        name: venue.name,
+        venueId: venue._id,
+        roomnumber: venue.roomnumber,
         capacity: venue.capacity,
-        location: venue.location,
-      },
+        location: venue.location
+      }
     });
 
     const savedEvent = await newEvent.save();
 
-    // ✅ Optional: Notify clients via socket
-    req.io.emit('venueStatusChanged', {
-      venueId: venue.name.toString(),
-      status: 'occupied',
-    });
+    // Socket.IO notifications
+    req.io.emitVenueStatusChange(venue.roomnumber, 'occupied');
+    req.io.emitEventUpdate(savedEvent._id, 'created');
+    
+    // Schedule automatic venue freeing
+    scheduleVenueFreeingJob(savedEvent.endTime, venue.roomnumber, req.io);
 
-    // ✅ Optional: Schedule venue auto-freeing (no longer needed if status is removed, but still usable)
-    scheduleVenueFreeingJob(savedEvent.endTime, venue.name, req.io);
+    return res.status(201).json(savedEvent);
 
-    res.status(201).json(savedEvent);
   } catch (error) {
-    console.error('Error creating event:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error('Create event error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 }
 
-
-
-
-
-/**
- * 📌 Get all events
- */
 export async function getAllEvents(req, res) {
-  const myProjectDb = req.app.locals.myProjectDb;
-  const Event = createEventModel(myProjectDb);
+  const Event = req.models.Event;
 
   try {
-    const events = await Event.find().sort({ createdAt: -1 });
-    res.json(events);
+    const events = await Event.find()
+      .sort({ startTime: 1 })
+      .lean();
+
+    // Add status based on current time
+    const now = new Date();
+    const eventsWithStatus = events.map(event => ({
+      ...event,
+      status: new Date(event.endTime) < now ? 'completed' : 
+              new Date(event.startTime) > now ? 'upcoming' : 'ongoing'
+    }));
+
+    return res.json(eventsWithStatus);
+
   } catch (error) {
-    console.error('Error fetching events:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error('Get events error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 }
 
-/**
- * 📌 Get event by ID
- */
 export async function getEventById(req, res) {
-  const myProjectDb = req.app.locals.myProjectDb;
-  const Event = createEventModel(myProjectDb);
-
+  const Event = req.models.Event;
   const { id } = req.params;
+
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ message: 'Invalid event ID' });
   }
 
   try {
     const event = await Event.findById(id);
-    if (!event) return res.status(404).json({ message: 'Event not found' });
-
-    res.json(event);
-  } catch (error) {
-    console.error('Error fetching event by ID:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-}
-
-/**
- * 📌 Update event by ID (only specific fields)
- */
-export async function updateEvent(req, res) {
-  const myProjectDb = req.app.locals.myProjectDb;
-  const Event = createEventModel(myProjectDb);
-  const { title, description, collegeName, startTime, endTime } = req.body;
-  const { id } = req.params;
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ message: 'Invalid event ID' });
-  }
-
-  const updateFields = {};
-  if (title) updateFields.title = title;
-  if (description) updateFields.description = description;
-  if (collegeName) updateFields.collegeName = collegeName;
-  if (startTime) updateFields.startTime = new Date(startTime);
-  if (endTime) updateFields.endTime = new Date(endTime);
-
-  if (updateFields.startTime && updateFields.endTime && updateFields.startTime >= updateFields.endTime) {
-    return res.status(400).json({ message: 'Start time must be before end time' });
-  }
-
-  try {
-    const updatedEvent = await Event.findByIdAndUpdate(
-      id,
-      updateFields,
-      { new: true, runValidators: true }
-    );
-
-    if (!updatedEvent) return res.status(404).json({ message: 'Event not found' });
-
-    res.json(updatedEvent);
-  } catch (error) {
-    console.error('Error updating event:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
-  }
-}
-
-/**
- * 📌 Delete event by ID
- */
-export async function deleteEvent(req, res) {
-  const myProjectDb = req.app.locals.myProjectDb;
-  const Event = createEventModel(myProjectDb);
-  const { id } = req.params;
-
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ message: 'Invalid event ID' });
-  }
-
-  try {
-    const deletedEvent = await Event.findByIdAndDelete(id);
-    if (!deletedEvent) return res.status(404).json({ message: 'Event not found' });
-
-    // ✅ Free venue if it exists
-    if (deletedEvent?.venueDetails?.venueId) {
-      const Venue = createClassroomModel(req.app.locals.venueDb);
-      await Venue.findByIdAndUpdate(deletedEvent.venueDetails.venueId, { status: 'free' });
-
-      req.io.emit('venueStatusChanged', {
-        venueId: deletedEvent.venueDetails.venueId,
-        status: 'free',
-      });
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
     }
 
-    res.json({ message: 'Event deleted successfully' });
+    // Add real-time status
+    const now = new Date();
+    const status = new Date(event.endTime) < now ? 'completed' : 
+                  new Date(event.startTime) > now ? 'upcoming' : 'ongoing';
+
+    return res.json({ ...event.toObject(), status });
+
   } catch (error) {
-    console.error('Error deleting event:', error);
-    res.status(500).json({ message: 'Internal Server Error' });
+    console.error('Get event error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
   }
 }
 
+// export async function updateEvent(req, res) {
+//   const Event = req.models.Event;
+//   const { id } = req.params;
+//   const updates = req.body;
+
+//   if (!mongoose.Types.ObjectId.isValid(id)) {
+//     return res.status(400).json({ message: 'Invalid event ID' });
+//   }
+
+//   try {
+//     // Prevent updating past events
+//     const existingEvent = await Event.findById(id);
+//     if (!existingEvent) {
+//       return res.status(404).json({ message: 'Event not found' });
+//     }
+
+//     if (new Date(existingEvent.startTime) < new Date()) {
+//       return res.status(400).json({ message: 'Cannot modify past events' });
+//     }
+
+//     const updatedEvent = await Event.findByIdAndUpdate(
+//       id,
+//       { ...updates, startTime: new Date(updates.startTime), endTime: new Date(updates.endTime) },
+//       { new: true, runValidators: true }
+//     );
+
+//     // Notify clients
+//     req.io.emitEventUpdate(id, 'updated');
+
+//     return res.json(updatedEvent);
+
+//   } catch (error) {
+//     console.error('Update event error:', error);
+//     return res.status(500).json({ message: 'Internal server error' });
+//   }
+// }
 
 
+
+export async function updateEvent(req, res) {
+  const Event = req.models.Event;
+  const { id } = req.params;
+  const updates = req.body;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: 'Invalid event ID' });
+  }
+
+  try {
+    const existingEvent = await Event.findById(id);
+    if (!existingEvent) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    if (new Date(existingEvent.startTime) < new Date()) {
+      return res.status(400).json({ message: 'Cannot modify past events' });
+    }
+
+    // Parse and format times
+    const { EventDate, startTime, endTime } = updates;
+    const updatePayload = { ...updates };
+
+    if (EventDate && startTime) {
+      const parsedStart = dayjs(`${EventDate} ${startTime}`, 'YYYY-MM-DD HH:mm');
+      if (!parsedStart.isValid()) {
+        return res.status(400).json({ message: 'Invalid start time format' });
+      }
+      updatePayload.startTime = parsedStart.toDate();
+    }
+
+    if (EventDate && endTime) {
+      const parsedEnd = dayjs(`${EventDate} ${endTime}`, 'YYYY-MM-DD HH:mm');
+      if (!parsedEnd.isValid()) {
+        return res.status(400).json({ message: 'Invalid end time format' });
+      }
+      updatePayload.endTime = parsedEnd.toDate();
+    }
+
+    if (EventDate) {
+      updatePayload.EventDate = EventDate; // still store the string if required
+    }
+
+    const updatedEvent = await Event.findByIdAndUpdate(id, updatePayload, {
+      new: true,
+      runValidators: true,
+    });
+
+    req.io.emitEventUpdate(id, 'updated');
+    return res.json(updatedEvent);
+
+  } catch (error) {
+    console.error('Update event error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+export async function deleteEvent(req, res) {
+  const Event = req.models.Event;
+  const Venue = req.models.Venue;
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: 'Invalid event ID' });
+  }
+
+  try {
+    const event = await Event.findByIdAndDelete(id);
+    if (!event) {
+      return res.status(404).json({ message: 'Event not found' });
+    }
+
+    // Free the venue if exists
+    if (event.venueDetails?.venueId) {
+      await Venue.findByIdAndUpdate(
+        event.venueDetails.venueId,
+        { status: 'free' }
+      );
+      // Socket.IO notifications
+      req.io.emitVenueStatusChange(event.venueDetails.roomnumber, 'free');
+      req.io.emitEventUpdate(id, 'deleted');
+    }
+
+    return res.json({ message: 'Event deleted successfully' });
+
+  } catch (error) {
+    console.error('Delete event error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+}
